@@ -16,12 +16,12 @@ jobs:
       with:
         path: saturn-src
 
-    # 2. Pull down the official Android wrapper environment
+    # 2. Clone the full, correct Android base container 
     - name: Clone Android Wrapper Base
       run: |
         git clone --recursive https://github.com android-base
 
-    # 3. Setup Android tools and compiler environments
+    # 3. Setup modern Android JDK 17 environments
     - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
@@ -31,50 +31,50 @@ jobs:
     - name: Setup Android NDK & SDK
       uses: android-actions/setup-android@v3
 
-    - name: Fetch Linux Core Build Tools
+    - name: Fetch Linux Build Tool Chains
       run: |
         sudo apt update
         sudo apt install -y build-essential git python3 curl libjsoncpp-dev libpng-dev
 
-    # 4. Inject Saturn's codebase into the Android JNI structure
+    # 4. Inject Saturn's custom game files into the build environment
     - name: Overlay Saturn Source Code into Wrapper
       run: |
-        # Clear out vanilla target directories
+        # Clear default vanilla files
         rm -rf android-base/app/jni/src/*
-        # Copy your repository's custom code base into the compilation container
+        # Overwrite wrapper files with Saturn's custom source repository
         cp -R saturn-src/* android-base/app/jni/src/
 
-    # 5. Extract ROM assets safely inside the compilation container
+    # 5. Extract asset structures natively via your python script
     - name: Prepare and Extract ROM Assets
       env:
         BASEROM_BASE64: ${{ secrets.BASEROM_US_BASE64 }}
       run: |
         cd android-base/app/jni/src
-        # Decode your secure GitHub Repository text secret back into the binary ROM
+        
+        # Check if the repository secret exists
         if [ ! -z "$BASEROM_BASE64" ]; then
           echo "$BASEROM_BASE64" | base64 --decode > baserom.us.z64
         else
-          echo "ERROR: BASEROM_US_BASE64 secret is empty or missing!" && exit 1
+          echo "ERROR: The GitHub Secret 'BASEROM_US_BASE64' is missing or empty!" && exit 1
         fi
         
-        # Trigger your code extraction script
+        # Run asset mapping logic
         if [ -f "extract_assets.py" ]; then
           python3 extract_assets.py us
         elif [ -f "extracted.py" ]; then
           python3 extracted.py us
         fi
 
-    # 6. Run Gradle to compile C/C++ architecture into an ARM .apk file
+    # 6. Execute Gradle to assemble the Android package
     - name: Compile APK via Gradle Wrapper
       run: |
         cd android-base
         chmod +x ./gradlew
-        # Compiles the NDK native libraries and packages your APK
         ./gradlew assembleDebug
 
-    # 7. Deliver your working installer package
+    # 7. Upload and save your completed APK
     - name: Upload Finished APK Artifact
       uses: actions/upload-artifact@v4
       with:
         name: saturn-legacy-android-apk
-        path: android-base/app/build/outputs/apk/debug/app-debug.apk
+        path: android-base/app/build/outputs/apk/debug/*.apk
